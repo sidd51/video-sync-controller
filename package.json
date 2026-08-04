@@ -1,0 +1,16 @@
+{
+  "name": "video-sync-controller",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Server-authoritative multi-display video sync",
+  "scripts": {
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build": "npm run build --prefix client",
+    "start": "NODE_ENV=production npm start --prefix server",
+    "install:all": "npm install --prefix server && npm install --prefix client"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

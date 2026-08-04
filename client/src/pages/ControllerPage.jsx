@@ -1,24 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { socket } from "../lib/socket";
-
-function formatTime(seconds = 0) {
-  const safeSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = safeSeconds % 60;
-
-  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
-}
+import { formatTime, getExpectedPosition } from "../lib/time";
 
 function ControllerPage() {
   const [session, setSession] = useState(null);
+  const [displays, setDisplays] = useState({});
   const [connected, setConnected] = useState(socket.connected);
-  const [seekPosition, setSeekPosition] = useState(0);
+  const [seekPosition, setSeekPosition] = useState("0");
+  const [liveExpected, setLiveExpected] = useState(0);
   const [error, setError] = useState("");
+
+  const sessionRef = useRef(null);
+  const receivedAtRef = useRef(Date.now());
+  const seekEditingRef = useRef(false);
 
   useEffect(() => {
     function handleSessionState(nextSession) {
+      sessionRef.current = nextSession;
+      receivedAtRef.current = Date.now();
       setSession(nextSession);
-      setSeekPosition(Math.floor(nextSession.expectedPosition));
+      setDisplays(nextSession.displays || {});
+      setLiveExpected(nextSession.expectedPosition);
+
+      if (!seekEditingRef.current) {
+        setSeekPosition(String(Math.floor(nextSession.expectedPosition)));
+      }
+    }
+
+    function handleDisplaysUpdate(nextDisplays) {
+      setDisplays(nextDisplays || {});
     }
 
     function handleConnect() {
@@ -32,10 +43,10 @@ function ControllerPage() {
     }
 
     socket.on("session:state", handleSessionState);
+    socket.on("displays:update", handleDisplaysUpdate);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
 
-    // Handles the case where the socket connected before this component mounted.
     if (socket.connected) {
       socket.emit("controller:register");
       socket.emit("session:request");
@@ -43,33 +54,54 @@ function ControllerPage() {
 
     return () => {
       socket.off("session:state", handleSessionState);
+      socket.off("displays:update", handleDisplaysUpdate);
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
     };
+  }, []);
+
+  // Tick expected position locally while playing so the UI advances between pushes.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (!sessionRef.current) {
+        return;
+      }
+
+      setLiveExpected(
+        getExpectedPosition(sessionRef.current, receivedAtRef.current)
+      );
+    }, 250);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   function sendCommand(command) {
     setError("");
 
     socket.emit("controller:command", command, (result) => {
-      if (!result.ok) {
-        setError(result.error || "Unable to send command");
+      if (!result?.ok) {
+        setError(result?.error || "Unable to send command");
       }
     });
   }
 
-  const displays = Object.values(session?.displays || {});
+  const displayList = Object.values(displays);
 
   return (
     <main className="page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Authoritative playback control</p>
-          <h1>Video Sync Controller</h1>
+          <h1>Controller</h1>
+          <p className="lede">
+            <Link to="/">Home</Link>
+            {" · "}
+            Open displays in other tabs to sync them here.
+          </p>
         </div>
 
         <span className={`connection ${connected ? "connected" : "disconnected"}`}>
-          {connected ? "● Server connected" : "● Server disconnected"}
+          {connected ? "Server connected" : "Server disconnected"}
         </span>
       </header>
 
@@ -82,8 +114,8 @@ function ControllerPage() {
           <section className="panel">
             <h2>Session</h2>
 
-            <label>
-              Video
+            <label className="field">
+              <span>Video</span>
               <select
                 value={session.selectedVideoId}
                 onChange={(event) =>
@@ -106,7 +138,7 @@ function ControllerPage() {
                 State: <strong>{session.isPlaying ? "Playing" : "Paused"}</strong>
               </span>
               <span>
-                Expected position: <strong>{formatTime(session.expectedPosition)}</strong>
+                Expected: <strong>{formatTime(liveExpected)}</strong>
               </span>
               <span>
                 Version: <strong>{session.version}</strong>
@@ -114,31 +146,37 @@ function ControllerPage() {
             </div>
 
             <div className="button-row">
-              <button onClick={() => sendCommand({ type: "play" })}>
+              <button type="button" onClick={() => sendCommand({ type: "play" })}>
                 Play / Resume
               </button>
-
-              <button onClick={() => sendCommand({ type: "pause" })}>
+              <button type="button" onClick={() => sendCommand({ type: "pause" })}>
                 Pause
               </button>
-
-              <button onClick={() => sendCommand({ type: "restart" })}>
+              <button type="button" onClick={() => sendCommand({ type: "restart" })}>
                 Restart
               </button>
             </div>
 
             <div className="seek-row">
-              <label>
-                Seek position (seconds)
+              <label className="field">
+                <span>Seek position (seconds)</span>
                 <input
                   type="number"
                   min="0"
+                  step="1"
                   value={seekPosition}
+                  onFocus={() => {
+                    seekEditingRef.current = true;
+                  }}
+                  onBlur={() => {
+                    seekEditingRef.current = false;
+                  }}
                   onChange={(event) => setSeekPosition(event.target.value)}
                 />
               </label>
 
               <button
+                type="button"
                 onClick={() =>
                   sendCommand({
                     type: "seek",
@@ -153,14 +191,18 @@ function ControllerPage() {
 
           <section className="panel">
             <div className="section-heading">
-              <div>
-                <h2>Connected displays</h2>
-                <p>{displays.length} active display{displays.length === 1 ? "" : "s"}</p>
-              </div>
+              <h2>Connected displays</h2>
+              <p>
+                {displayList.length} active display
+                {displayList.length === 1 ? "" : "s"}
+              </p>
             </div>
 
-            {displays.length === 0 ? (
-              <p>No display clients are currently connected.</p>
+            {displayList.length === 0 ? (
+              <p>
+                No displays connected yet.{" "}
+                <Link to="/">Open a new display</Link> from the home page.
+              </p>
             ) : (
               <div className="table-wrap">
                 <table>
@@ -168,21 +210,26 @@ function ControllerPage() {
                     <tr>
                       <th>Display</th>
                       <th>Connection</th>
-                      <th>Playback state</th>
-                      <th>Local position</th>
+                      <th>Playback</th>
+                      <th>Position</th>
                       <th>Drift</th>
                       <th>Last update</th>
                     </tr>
                   </thead>
-
                   <tbody>
-                    {displays.map((display) => (
+                    {displayList.map((display) => (
                       <tr key={display.displayId}>
-                        <td>{display.displayId}</td>
+                        <td>
+                          <Link to={`/display/${display.displayId}`}>
+                            {display.displayId}
+                          </Link>
+                        </td>
                         <td>{display.connectionStatus}</td>
                         <td>{display.playbackState}</td>
                         <td>{formatTime(display.reportedPosition)}</td>
-                        <td>{display.driftMs} ms</td>
+                        <td className={Math.abs(display.driftMs) > 250 ? "drift-warn" : ""}>
+                          {display.driftMs} ms
+                        </td>
                         <td>
                           {new Date(display.lastSeenAt).toLocaleTimeString()}
                         </td>
