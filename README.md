@@ -114,6 +114,16 @@ NODE_ENV=production PORT=3001 npm start
 
 App: http://localhost:3001/
 
+### Render (Web Service)
+
+| Setting | Value |
+|---------|-------|
+| Build Command | `npm run install:all && npm run build` |
+| Start Command | `npm start` |
+| `NODE_ENV` | `production` |
+
+`install:all` uses `--include=dev` for the client so Vite still installs when Render sets `NODE_ENV=production` during the build.
+
 
 **Done (core assignment)**
 
