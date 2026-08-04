@@ -1,5 +1,7 @@
 # Video Sync Controller
 
+#Live link :- https://video-sync-controller.onrender.com/
+
 A small real-time system where one **Controller** manages synchronized video playback across multiple **Display** clients.
 
 The coordination server is the authoritative source of playback state. Displays report their local position every second; the Controller shows per-display drift; each Display automatically corrects itself when drift grows.
