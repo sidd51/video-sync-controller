@@ -159,6 +159,9 @@ io.on("connection", (socket) => {
 
     broadcastSession();
   });
+  socket.on("session:request", () => {
+  socket.emit("session:state", getPublicSession());
+});
 
   socket.on("controller:command", (command, acknowledge) => {
     if (socket.data.role !== "controller") {
