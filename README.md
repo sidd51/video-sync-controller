@@ -1,6 +1,6 @@
 # Video Sync Controller
 
-#Live link :- https://video-sync-controller.onrender.com/
+# Live link :- https://video-sync-controller.onrender.com/
 
 A small real-time system where one **Controller** manages synchronized video playback across multiple **Display** clients.
 
