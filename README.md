@@ -147,4 +147,4 @@ server/
   index.js       Entire coordination layer (~220 lines)
 ```
 
-Keep the server in one file on purpose: the whole state machine fits on one screen and is easy to walk through in an interview.
+
